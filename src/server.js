@@ -2,60 +2,75 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import { MongoClient } from 'mongodb';
 
-const articlesInfor = {
-  'learn-react': {
-    upvotes: 0,
-    comments: []
-  },
-  'learn-node': {
-    upvotes: 0,
-    comments: []
-  },
-  'my-thoughts-on-resumes': {
-    upvotes: 0,
-    comments: []
-  }
-};
-
 const app = express();
 
 app.use(bodyParser.json());
+const uri = 'mongodb://localhost:27017';
 
-app.get('/api/articles/:name', async (req, res) => {
-  const { name } = req.params;
-  const uri = 'mongodb://localhost:27017';
-
+const withDB = async (operations, res) => {
   try {
     const client = await MongoClient.connect(uri, {
       useNewUrlParser: true,
       useUnifiedTopology: true
     });
     const db = client.db('my-blog');
-    const articleInfo = await db.collection('articles').findOne({ name: name });
 
-    res.status(200).json(articleInfo);
+    await operations(db);
+
     client.close();
   } catch (error) {
     res.status(500).json({ message: 'Error connecting to db', error });
-    client.close();
   }
-});
+};
 
-app.post('/api/articles/:name/upvote', (req, res) => {
+app.get('/api/articles/:name', async (req, res) => {
   const { name } = req.params;
-
-  articlesInfor[name].upvotes += 1;
-
-  res
-    .status(200)
-    .send(`${name} now has ${articlesInfor[name].upvotes} upvotes.`);
+  withDB(async db => {
+    const articleInfo = await db.collection('articles').findOne({ name: name });
+    res.status(200).json(articleInfo);
+  }, res);
 });
 
-app.post('/api/articles/:name/add-comment', (req, res) => {
+app.post('/api/articles/:name/upvote', async (req, res) => {
+  const { name } = req.params;
+  withDB(async db => {
+    const articleInfo = await db.collection('articles').findOne({ name: name });
+    await db.collection('articles').updateOne(
+      { name: name },
+      {
+        $set: {
+          upvotes: articleInfo.upvotes + 1
+        }
+      }
+    );
+    const updatedArticleInfo = await db
+      .collection('articles')
+      .findOne({ name: name });
+
+    res.status(200).json(updatedArticleInfo);
+  }, res);
+});
+
+app.post('/api/articles/:name/add-comment', async (req, res) => {
   const { username, text } = req.body;
   const { name } = req.params;
-  articlesInfor[name].comments.push({ username, text });
-  res.status(200).send(articlesInfor[name]);
+  withDB(async db => {
+    const articleInfo = await db.collection('articles').findOne({ name: name });
+
+    await db.collection('articles').updateOne(
+      { name: name },
+      {
+        $set: {
+          comments: articleInfo.comments.concat({ username, text })
+        }
+      }
+    );
+    const updatedArticleInfo = await db
+      .collection('articles')
+      .findOne({ name: name });
+
+    res.status(200).json(updatedArticleInfo);
+  }, res);
 });
 
 app.listen(8000, () => console.log('Listening on port 8000!'));
