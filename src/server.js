@@ -1,9 +1,11 @@
 import express from 'express';
+import path from 'path';
 import bodyParser from 'body-parser';
 import { MongoClient } from 'mongodb';
 
 const app = express();
 
+app.use(express.static(path.join(__dirname, '/build')));
 app.use(bodyParser.json());
 const uri = 'mongodb://localhost:27017';
 
@@ -71,6 +73,10 @@ app.post('/api/articles/:name/add-comment', async (req, res) => {
 
     res.status(200).json(updatedArticleInfo);
   }, res);
+});
+
+app.get('*', () => {
+  res.sendFile(path.join(__dirname + '/build/index.html'));
 });
 
 const port = process.env.PORT || 8000;
